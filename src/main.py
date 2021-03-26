@@ -6,6 +6,7 @@
 
 import igraph as ig
 import numpy as np
+import glob
 
 import argparse
 import collections
@@ -37,7 +38,8 @@ def main(args, logger):
     # Read all graphs and labels; there is no direct way of checking
     # that the labels are 'correct' for the graphs, but at least the
     # code will check that they have the same cardinality.
-    graphs = [ig.read(filename) for filename in args.FILES]
+    filenames = glob.glob(args.FILES)
+    graphs = [ig.read(filename) for filename in filenames]
     labels = read_labels(args.labels)
 
     # Simple pre-processing to ensure that all graphs are set up
@@ -188,7 +190,7 @@ def main(args, logger):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'FILES', nargs='+', help='Input graphs (in some supported format)'
+        'FILES', help='Input graphs directory (in some supported format)'
     )
 
     # Controls behaviour of the classifier (will be treated as
