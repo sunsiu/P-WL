@@ -34,12 +34,11 @@ from utilities import read_labels
 
 
 def main(args, logger):
-
     # Read all graphs and labels; there is no direct way of checking
     # that the labels are 'correct' for the graphs, but at least the
     # code will check that they have the same cardinality.
-    # filenames = glob.glob(args.FILES)
-    graphs = [ig.read(filename) for filename in args.FILES]
+    filenames = glob.glob(args.FILES)
+    graphs = [ig.read(filename) for filename in filenames]
     labels = read_labels(args.labels)
 
     # Simple pre-processing to ensure that all graphs are set up
@@ -113,8 +112,7 @@ def main(args, logger):
         accuracy_scores = []
 
         for train_index, test_index in cv.split(X, y):
-            rf_clf = RandomForestClassifier(
-                n_estimators=50,
+            rf_clf = SVC(
                 class_weight='balanced' if args.balanced else None,
                 random_state=42
             )
@@ -190,7 +188,7 @@ def main(args, logger):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'FILES', nargs='+', help='Input graphs directory (in some supported format)'
+        'FILES', help='Input graphs directory (in some supported format)'
     )
 
     # Controls behaviour of the classifier (will be treated as
