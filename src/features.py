@@ -76,7 +76,6 @@ class WeightAssigner:
         self._smooth = smooth
 
     def fit_transform(self, graph):
-        graph = shortestpathgraph(graph)
         for edge in graph.es:
             source, target = edge.tuple
 
@@ -101,6 +100,7 @@ class WeightAssigner:
             else:
                 edge['weight'] = weight
 
+        graph = shortestpathgraph(graph)
         return graph
 
     def _ensure_list(self, l):

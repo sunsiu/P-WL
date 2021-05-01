@@ -52,9 +52,9 @@ def main(args, logger):
         if 'label' not in graph.vs.attributes():
             graph.vs['label'] = [0] * len(graph.vs)
 
-        # Reset edge weights if they already exist
-        if 'weight' in graph.es.attributes():
-            graph.es['weight'] = [0] * len(graph.es)
+        # # Reset edge weights if they already exist
+        # if 'weight' in graph.es.attributes():
+        #     graph.es['weight'] = [0] * len(graph.es)
 
     logger.info(
         'Read {} graphs and {} labels'.format(len(graphs), len(labels))
