@@ -68,6 +68,7 @@ def main(args, logger):
         args.metric = 'uniform'
 
     pwl = PersistentWeisfeilerLehman(
+            use_persistence_image=args.use_persistence_image,
             use_cycle_persistence=args.use_cycle_persistence,
             use_original_features=args.use_original_features,
             use_label_persistence=True,
@@ -213,6 +214,10 @@ if __name__ == '__main__':
         default=False, help='Whether to do hyperparameter grid search'
     )
 
+    parser.add_argument(
+        '-pi', '--use_persistence-image', action='store_true', default=False,
+        help='Use persistence images as the feature vector, ignores other feature flags.'
+    )
     parser.add_argument(
         '-c', '--use-cycle-persistence', action='store_true', default=False,
         help='Indicates whether cycle persistence should be calculated or not'

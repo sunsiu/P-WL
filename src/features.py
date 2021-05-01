@@ -11,11 +11,35 @@ import numpy as np
 
 from topology import PersistenceDiagram
 from topology import PersistenceDiagramCalculator
+from gudhi.representations.vector_methods import PersistenceImage
 
 from weisfeiler_lehman import WeisfeilerLehman
 
 from scipy.stats import entropy
 from sklearn.base import TransformerMixin
+
+
+def shortestpathgraph(g):
+    spl = g.shortest_paths_dijkstra(weights='weight')
+    newe = []
+    orge = []
+    orgw = []
+    fe = []
+    for edge in g.es:
+        orge.append(edge.tuple)
+    nodes = g.vs.indices
+    for i in nodes:
+        for j in nodes:
+            if ((i, j) not in orge) and (i < j):
+                newe.append((i, j))
+
+    g.add_edges(newe)
+
+    for edge in g.es:
+        (i, j) = edge.tuple
+        edge['weight'] = spl[i][j]
+
+    return g
 
 
 class WeightAssigner:
@@ -52,7 +76,7 @@ class WeightAssigner:
         self._smooth = smooth
 
     def fit_transform(self, graph):
-
+        graph = shortestpathgraph(graph)
         for edge in graph.es:
             source, target = edge.tuple
 
@@ -203,6 +227,7 @@ class PersistenceFeaturesGenerator:
     '''
 
     def __init__(self,
+                 use_persistence_image,
                  use_infinity_norm,
                  use_total_persistence,
                  use_label_persistence,
@@ -210,6 +235,7 @@ class PersistenceFeaturesGenerator:
                  use_original_features,
                  store_persistence_diagrams,
                  p):
+        self._use_persistence_image = use_persistence_image
         self._use_infinity_norm = use_infinity_norm
         self._use_total_persistence = use_total_persistence
         self._use_label_persistence = use_label_persistence
@@ -257,15 +283,17 @@ class PersistenceFeaturesGenerator:
 
         # Calculate the space required for the feature vector matrix.
         # This depends on the attributes selected by the client.
-
         num_rows = len(graphs)
-        num_columns = self._use_infinity_norm          \
-            + self._use_total_persistence              \
-            + self._use_label_persistence * num_labels \
-            + self._use_original_features * num_labels \
-            + self._use_cycle_persistence * num_labels
+        if self._use_persistence_image:
+            X = np.zeros((num_rows, 100))  # Persistence images are 10x10
+        else:
+            num_columns = self._use_infinity_norm          \
+                + self._use_total_persistence              \
+                + self._use_label_persistence * num_labels \
+                + self._use_original_features * num_labels \
+                + self._use_cycle_persistence * num_labels
 
-        X = np.zeros((num_rows, num_columns))
+            X = np.zeros((num_rows, num_columns))
 
         # Fill the feature matrix by calculating persistence-based
         # features for each of the graphs, using the initial
@@ -284,68 +312,73 @@ class PersistenceFeaturesGenerator:
             pdc = PersistenceDiagramCalculator()
             persistence_diagram, edge_indices_cycles = pdc.fit_transform(graph)
 
-            if self._use_infinity_norm:
-                x_infinity_norm = \
-                    [persistence_diagram.infinity_norm(self._p)]
+            if self._use_persistence_image:
+                pi = PersistenceImage(resolution=[10, 10])
+                pd_pairs = np.array([[x, y] for x, y, _ in persistence_diagram._pairs])
+                X[index, :] = pi.__call__(pd_pairs)  # __call__ instead of fit and transform for single persistence image
+            else:
+                if self._use_infinity_norm:
+                    x_infinity_norm = \
+                        [persistence_diagram.infinity_norm(self._p)]
 
-            if self._use_total_persistence:
-                x_total_persistence = \
-                    [persistence_diagram.total_persistence(self._p)]
+                if self._use_total_persistence:
+                    x_total_persistence = \
+                        [persistence_diagram.total_persistence(self._p)]
 
-            if self._use_label_persistence:
-                x_label_persistence = np.zeros(num_labels)
+                if self._use_label_persistence:
+                    x_label_persistence = np.zeros(num_labels)
 
-                for x, y, c in persistence_diagram:
-                    label = graph.vs[c]['compressed_label']
-                    persistence = abs(x - y)**self._p
-                    x_label_persistence[label] += persistence
+                    for x, y, c in persistence_diagram:
+                        label = graph.vs[c]['compressed_label']
+                        persistence = abs(x - y)**self._p
+                        x_label_persistence[label] += persistence
 
-                if self._store_persistence_diagrams:
-                    self._persistence_diagrams.append(persistence_diagram)
+                    if self._store_persistence_diagrams:
+                        self._persistence_diagrams.append(persistence_diagram)
 
-            # Add the original features of the Weisfeiler--Lehman
-            # iteration to the feature matrix. This can be easily
-            # done by just counting '1' for each point in the PD.
-            if self._use_original_features:
-                x_original_features = np.zeros(num_labels)
+                # Add the original features of the Weisfeiler--Lehman
+                # iteration to the feature matrix. This can be easily
+                # done by just counting '1' for each point in the PD.
+                if self._use_original_features:
+                    x_original_features = np.zeros(num_labels)
 
-                for _, _, c in persistence_diagram:
-                    label = graph.vs[c]['compressed_label']
-                    x_original_features[label] += 1
+                    for _, _, c in persistence_diagram:
+                        label = graph.vs[c]['compressed_label']
+                        x_original_features[label] += 1
 
-            # Cycle persistence: use the edge information, i.e. the
-            # classification gained from the persistence diagram
-            # calculation above, in order to assign weights.
-            if self._use_cycle_persistence:
-                n = len(persistence_diagram)
-                m = graph.ecount()
-                k = persistence_diagram.betti
-                num_cycles = m - n + k
+                # Cycle persistence: use the edge information, i.e. the
+                # classification gained from the persistence diagram
+                # calculation above, in order to assign weights.
+                if self._use_cycle_persistence:
+                    n = len(persistence_diagram)
+                    m = graph.ecount()
+                    k = persistence_diagram.betti
+                    num_cycles = m - n + k
 
-                # If this assertion fails, there's something seriously
-                # wrong with our understanding of cycles.
-                assert num_cycles == len(edge_indices_cycles)
+                    # If this assertion fails, there's something seriously
+                    # wrong with our understanding of cycles.
+                    assert num_cycles == len(edge_indices_cycles)
 
-                x_cycle_persistence = np.zeros(num_labels)
-                total_cycle_persistence = 0.0
+                    x_cycle_persistence = np.zeros(num_labels)
+                    total_cycle_persistence = 0.0
 
-                for edge_index in edge_indices_cycles:
-                    edge = graph.es[edge_index]
-                    weight = edge['weight']
+                    for edge_index in edge_indices_cycles:
+                        edge = graph.es[edge_index]
+                        weight = edge['weight']
 
-                    total_cycle_persistence += weight**self._p
+                        total_cycle_persistence += weight**self._p
 
-                    source_label = graph.vs[edge.source]['compressed_label']
-                    target_label = graph.vs[edge.target]['compressed_label']
+                        source_label = graph.vs[edge.source]['compressed_label']
+                        target_label = graph.vs[edge.target]['compressed_label']
 
-                    x_cycle_persistence[source_label] += weight**self._p
-                    x_cycle_persistence[target_label] += weight**self._p
+                        x_cycle_persistence[source_label] += weight**self._p
+                        x_cycle_persistence[target_label] += weight**self._p
 
-            X[index, :] = np.concatenate((x_infinity_norm,
-                                          x_total_persistence,
-                                          x_label_persistence,
-                                          x_original_features,
-                                          x_cycle_persistence))
+                X[index, :] = np.concatenate((x_infinity_norm,
+                                              x_total_persistence,
+                                              x_label_persistence,
+                                              x_original_features,
+                                              x_cycle_persistence))
 
         return X
 
@@ -358,6 +391,7 @@ class PersistentWeisfeilerLehman:
     '''
 
     def __init__(self,
+                 use_persistence_image=False,
                  use_infinity_norm=False,
                  use_total_persistence=False,
                  use_label_persistence=False,
@@ -371,6 +405,7 @@ class PersistentWeisfeilerLehman:
         TODO: describe parameters
         '''
 
+        self._use_persistence_image = use_persistence_image
         self._use_infinity_norm = use_infinity_norm
         self._use_total_persistence = use_total_persistence
         self._use_label_persistence = use_label_persistence
@@ -396,6 +431,7 @@ class PersistentWeisfeilerLehman:
         )
 
         pfg = PersistenceFeaturesGenerator(
+                use_persistence_image=self._use_persistence_image,
                 use_infinity_norm=self._use_infinity_norm,
                 use_total_persistence=self._use_total_persistence,
                 use_label_persistence=self._use_label_persistence,
@@ -428,7 +464,7 @@ class PersistentWeisfeilerLehman:
             for graph_index in sorted(label_dicts[iteration].keys()):
                 labels_raw, labels_compressed = \
                     label_dicts[iteration][graph_index]
-
+                # print(label_dicts[iteration][graph_index])
                 weighted_graphs[graph_index].vs['label'] = \
                     labels_raw
 
@@ -447,8 +483,7 @@ class PersistentWeisfeilerLehman:
                     labels = original_labels[graph_index]
                     weighted_graphs[graph_index]['original_label'] = labels
 
-                weighted_graphs[graph_index] = \
-                    wa.fit_transform(weighted_graphs[graph_index])
+                weighted_graphs[graph_index] = wa.fit_transform(weighted_graphs[graph_index])
 
             X_per_iteration.append(pfg.fit_transform(weighted_graphs))
 
@@ -492,7 +527,7 @@ class WeisfeilerLehmanSubtree:
         # number of iterations.
         wl = WeisfeilerLehman()
         label_dicts = wl.fit_transform(graphs, num_iterations)
-
+        # print(label_dicts)
         X_per_iteration = []
         num_columns_per_iteration = {}
 
