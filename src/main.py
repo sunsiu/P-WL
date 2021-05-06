@@ -37,8 +37,8 @@ def main(args, logger):
     # Read all graphs and labels; there is no direct way of checking
     # that the labels are 'correct' for the graphs, but at least the
     # code will check that they have the same cardinality.
-    filenames = glob.glob(args.FILES)
-    graphs = [ig.read(filename) for filename in filenames]
+    # filenames = glob.glob(args.FILES)
+    graphs = [ig.read(filename) for filename in args.FILES]
     labels = read_labels(args.labels)
 
     # Simple pre-processing to ensure that all graphs are set up
@@ -52,9 +52,9 @@ def main(args, logger):
         if 'label' not in graph.vs.attributes():
             graph.vs['label'] = [0] * len(graph.vs)
 
-        # # Reset edge weights if they already exist
-        # if 'weight' in graph.es.attributes():
-        #     graph.es['weight'] = [0] * len(graph.es)
+       # Reset edge weights if they already exist
+        if 'weight' in graph.es.attributes():
+            graph.es['weight'] = [0] * len(graph.es)
 
     logger.info(
         'Read {} graphs and {} labels'.format(len(graphs), len(labels))
@@ -113,7 +113,7 @@ def main(args, logger):
         accuracy_scores = []
 
         for train_index, test_index in cv.split(X, y):
-            rf_clf = SVC(
+            rf_clf = RandomForestClassifier(
                 class_weight='balanced' if args.balanced else None,
                 random_state=42
             )
@@ -144,6 +144,7 @@ def main(args, logger):
             else:
                 clf = rf_clf
 
+            np.nan_to_num(X, copy=False, posinf=0.0)
             X_train, X_test = X[train_index], X[test_index]
             y_train, y_test = y[train_index], y[test_index]
 
@@ -189,7 +190,7 @@ def main(args, logger):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'FILES', help='Input graphs directory (in some supported format)'
+        'FILES', nargs='+', help='Input graphs directory (in some supported format)'
     )
 
     # Controls behaviour of the classifier (will be treated as

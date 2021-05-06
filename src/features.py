@@ -314,7 +314,16 @@ class PersistenceFeaturesGenerator:
 
             if self._use_persistence_image:
                 pi = PersistenceImage(resolution=[10, 10])
-                pd_pairs = np.array([[x, y] for x, y, _ in persistence_diagram._pairs])
+                pd_pairs = []
+                for x, y, _ in persistence_diagram._pairs:
+                    if x == np.inf:
+                        pd_pairs.append([0, y])
+                    elif y == np.inf:
+                        pd_pairs.append([x, 0])
+                    else:
+                        pd_pairs.append([x, y])
+                
+                pd_pairs = np.array(pd_pairs)
                 X[index, :] = pi.__call__(pd_pairs)  # __call__ instead of fit and transform for single persistence image
             else:
                 if self._use_infinity_norm:
